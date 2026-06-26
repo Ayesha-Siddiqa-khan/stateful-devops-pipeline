@@ -9,4 +9,5 @@ data:
   POSTGRES_HOST: "postgres.stateful-app.svc.cluster.local"
   POSTGRES_PORT: "5432"
   POSTGRES_DB: "kubestate"
-  NEXT_PUBLIC_API_URL: "http://backend.stateful-app.svc.cluster.local"
+  POSTGRES_USER: "kubestate"
+  NEXT_PUBLIC_API_URL: ""

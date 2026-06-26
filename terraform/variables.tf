@@ -468,7 +468,7 @@ variable "ec2_instances" {
     },
     {
       "name" : "t3-micro",
-      "instance_type" : "t3.micro",
+      "instance_type" : "t3.small",
       "quantity" : 1,
       "subnet_type" : "public",
       "associate_public_ip" : true,

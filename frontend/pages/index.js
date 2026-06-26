@@ -1,6 +1,6 @@
 import { useState } from "react";
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "";
 
 export default function Home() {
   const [form, setForm] = useState({ name: "", role: "", tool: "", headline: "" });
@@ -17,7 +17,7 @@ export default function Home() {
     setResult(null);
 
     try {
-      const res = await fetch(`${API_URL}/api/profile`, {
+      const res = await fetch(`/api/profile`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(form),
