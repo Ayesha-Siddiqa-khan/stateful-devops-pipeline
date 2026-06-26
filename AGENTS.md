@@ -57,17 +57,40 @@ kubectl apply -f k8s/ --dry-run=client
 - Check Dockerfile syntax
 - Verify base image exists
 - Check for missing files referenced in COPY/ADD
+- Add `.dockerignore` to exclude `node_modules`, `.next`, `__pycache__`
 
 ### 3. Kubernetes Deployment Issues
 - Verify image tags exist in ECR
 - Check namespace exists: `kubectl get ns stateful-app`
 - Check PVC status: `kubectl get pvc -n stateful-app`
 - Check pod events: `kubectl describe pod <pod> -n stateful-app`
+- **ECR pull fails**: Create `ecr-secret` in namespace (see deploy.yml)
+- **NodePort not accessible**: Patch service to NodePort type + open SG ports 30000-32767
 
 ### 4. GitHub Actions Workflow Issues
 - Validate YAML syntax
 - Check secrets/vars are set in repo settings
 - Verify OIDC role ARN is correct
+- Deploy.yml must create `ecr-secret` for pods to pull from ECR
+
+### 5. Frontend Cannot Reach Backend
+- **Root cause**: `NEXT_PUBLIC_API_URL` is baked at build time into JS bundle
+- **Fix**: Use custom `server.js` with Node.js `http` proxy (not Next.js rewrites, which are build-time only in standalone mode)
+- Frontend proxies `/api/*` to backend via cluster DNS: `http://backend.stateful-app.svc.cluster.local`
+
+### 6. Postgres Probes Failing
+- `$(POSTGRES_USER)` shell expansion does NOT work in K8s exec probes
+- Hardcode the username: `pg_isready -U kubestate -d kubestate`
+
+### 7. Worker Node Cannot Reach EC2 API (CSI Driver Fails)
+- CSI controller must run on master node (which has internet access)
+- Fix: Patch `ebs-csi-controller` deployment with `nodeSelector` for `node-role.kubernetes.io/control-plane: ""` and tolerations
+- Add inline EBS policy to IAM roles in `terraform/iam.tf`
+
+### 8. Terraform Worker Instance Type
+- Changing worker name in `for_each` map causes destroy+recreate (lose all pods/PVCs)
+- **NEVER change the map key** - only change `instance_type` value
+- Use `instance_type: "t3.small"` (not `t3.micro` which runs out of memory)
 
 ## Key Files to Check When Something Breaks
 
