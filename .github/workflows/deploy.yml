@@ -1,0 +1,128 @@
+name: Build and Deploy
+
+on:
+  push:
+    branches: [main]
+
+env:
+  AWS_REGION: ${{ vars.AWS_REGION }}
+  ECR_REGISTRY: ${{ vars.AWS_ACCOUNT_ID }}.dkr.ecr.${{ vars.AWS_REGION }}.amazonaws.com
+  BACKEND_REPO: ${{ vars.BACKEND_REPO }}
+  FRONTEND_REPO: ${{ vars.FRONTEND_REPO }}
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  build-and-push:
+    name: Build and Push to ECR
+    runs-on: ubuntu-latest
+    outputs:
+      image_tag: ${{ steps.meta.outputs.tag }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to ECR
+        id: ecr-login
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Generate image tag
+        id: meta
+        run: echo "tag=${{ github.sha }}" >> "$GITHUB_OUTPUT"
+
+      - name: Build and push backend
+        uses: docker/build-push-action@v6
+        with:
+          context: ./backend
+          push: true
+          tags: |
+            ${{ env.ECR_REGISTRY }}/${{ env.BACKEND_REPO }}:${{ steps.meta.outputs.tag }}
+            ${{ env.ECR_REGISTRY }}/${{ env.BACKEND_REPO }}:latest
+
+      - name: Build and push frontend
+        uses: docker/build-push-action@v6
+        with:
+          context: ./frontend
+          push: true
+          tags: |
+            ${{ env.ECR_REGISTRY }}/${{ env.FRONTEND_REPO }}:${{ steps.meta.outputs.tag }}
+            ${{ env.ECR_REGISTRY }}/${{ env.FRONTEND_REPO }}:latest
+
+  deploy:
+    name: Deploy to Kubernetes
+    runs-on: ubuntu-latest
+    needs: build-and-push
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to ECR
+        id: ecr-login
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Set up kubectl
+        uses: azure/setup-kubectl@v4
+
+      - name: Configure kubeconfig
+        run: |
+          mkdir -p $HOME/.kube
+          echo "${{ secrets.KUBECONFIG }}" | base64 -d > $HOME/.kube/config
+          chmod 600 $HOME/.kube/config
+
+      - name: Deploy namespace and storage class
+        run: |
+          kubectl apply -f k8s/storage/gp3-storageclass.yaml
+          kubectl apply -f k8s/stateful-app/namespace.yaml
+
+      - name: Deploy secrets and config
+        run: |
+          kubectl apply -f k8s/configmap.yaml
+          kubectl apply -f k8s/secret.yaml
+
+      - name: Deploy database StatefulSet
+        run: |
+          kubectl apply -f k8s/service-db-headless.yaml
+          kubectl apply -f k8s/statefulset-db.yaml
+
+      - name: Wait for database pods
+        run: |
+          kubectl rollout status statefulset/postgres -n stateful-app --timeout=120s
+
+      - name: Deploy backend
+        run: |
+          sed "s|__ECR_REGISTRY__|${{ env.ECR_REGISTRY }}|g; s|__TAG__|${{ needs.build-and-push.outputs.image_tag }}|g" \
+            k8s/backend.yaml | kubectl apply -f -
+          kubectl apply -f k8s/backend-service.yaml
+
+      - name: Deploy frontend
+        run: |
+          sed "s|__ECR_REGISTRY__|${{ env.ECR_REGISTRY }}|g; s|__TAG__|${{ needs.build-and-push.outputs.image_tag }}|g" \
+            k8s/frontend.yaml | kubectl apply -f -
+          kubectl apply -f k8s/frontend-service.yaml
+
+      - name: Verify deployment
+        run: |
+          echo "=== Pods ==="
+          kubectl get pods -n stateful-app
+          echo ""
+          echo "=== Services ==="
+          kubectl get svc -n stateful-app
+          echo ""
+          echo "=== StatefulSet ==="
+          kubectl get statefulset -n stateful-app

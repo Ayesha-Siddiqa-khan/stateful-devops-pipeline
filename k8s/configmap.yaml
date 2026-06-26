@@ -1,0 +1,12 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: app-config
+  namespace: stateful-app
+data:
+  APP_ENV: "dev"
+  APP_REGION: "us-east-1"
+  POSTGRES_HOST: "postgres.stateful-app.svc.cluster.local"
+  POSTGRES_PORT: "5432"
+  POSTGRES_DB: "kubestate"
+  NEXT_PUBLIC_API_URL: "http://backend.stateful-app.svc.cluster.local"
