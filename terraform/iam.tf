@@ -58,7 +58,7 @@ resource "aws_iam_policy" "github_actions_ecr_push" {
         Sid      = "AllowPushToSelectedRepository"
         Effect   = "Allow"
         Action   = ["ecr:BatchCheckLayerAvailability", "ecr:CompleteLayerUpload", "ecr:InitiateLayerUpload", "ecr:PutImage", "ecr:UploadLayerPart", "ecr:BatchGetImage", "ecr:GetDownloadUrlForLayer"]
-        Resource = local.ecr_repository_arn
+        Resource = [aws_ecr_repository.main_1.arn, aws_ecr_repository.main_2.arn]
       }
     ]
   })
@@ -113,7 +113,7 @@ resource "aws_iam_policy" "worker_ec2_ecr_pull" {
         Sid      = "AllowPullFromSelectedRepository"
         Effect   = "Allow"
         Action   = ["ecr:BatchCheckLayerAvailability", "ecr:BatchGetImage", "ecr:GetDownloadUrlForLayer"]
-        Resource = local.ecr_repository_arn
+        Resource = [aws_ecr_repository.main_1.arn, aws_ecr_repository.main_2.arn]
       }
     ]
   })
@@ -166,7 +166,7 @@ resource "aws_iam_policy" "terrapilot_ec2_ecr_pull" {
         Sid      = "AllowPullFromSelectedRepository"
         Effect   = "Allow"
         Action   = ["ecr:BatchCheckLayerAvailability", "ecr:BatchGetImage", "ecr:GetDownloadUrlForLayer"]
-        Resource = local.ecr_repository_arn
+        Resource = [aws_ecr_repository.main_1.arn, aws_ecr_repository.main_2.arn]
       }
     ]
   })
