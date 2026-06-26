@@ -177,3 +177,65 @@ resource "aws_iam_role_policy_attachment" "terrapilot_ec2_ecr_pull" {
   policy_arn = aws_iam_policy.terrapilot_ec2_ecr_pull.arn
 }
 
+
+
+# Inline EBS volume access policy for master node
+resource "aws_iam_role_policy" "master_ebs_volume_access" {
+  name = "${local.resource_prefix}-master-ebs-volume-access"
+  role = aws_iam_role.terrapilot_ec2_userdata.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid    = "AllowEBSVolumeOperations"
+        Effect = "Allow"
+        Action = [
+          "ec2:AttachVolume",
+          "ec2:DetachVolume",
+          "ec2:CreateVolume",
+          "ec2:DeleteVolume",
+          "ec2:CreateTags",
+          "ec2:DescribeVolumes",
+          "ec2:DescribeInstances",
+          "ec2:DescribeSnapshots",
+          "ec2:DescribeVolumeStatus",
+          "ec2:ModifyVolume"
+        ]
+        Resource = "*"
+      }
+    ]
+  })
+}
+
+# Inline EBS volume access policy for worker node
+resource "aws_iam_role_policy" "worker_ebs_volume_access" {
+  name = "${local.resource_prefix}-worker-ebs-volume-access"
+  role = aws_iam_role.worker_ec2_ecr_pull.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid    = "AllowEBSVolumeOperations"
+        Effect = "Allow"
+        Action = [
+          "ec2:AttachVolume",
+          "ec2:DetachVolume",
+          "ec2:CreateVolume",
+          "ec2:DeleteVolume",
+          "ec2:CreateTags",
+          "ec2:DescribeVolumes",
+          "ec2:DescribeInstances",
+          "ec2:DescribeSnapshots",
+          "ec2:DescribeVolumeStatus",
+          "ec2:ModifyVolume"
+        ]
+        Resource = "*"
+      }
+    ]
+  })
+}
+
+
+

@@ -95,6 +95,16 @@ jobs:
           kubectl apply -f k8s/configmap.yaml
           kubectl apply -f k8s/secret.yaml
 
+      - name: Create ECR pull secret
+        run: |
+          ECR_TOKEN=$(aws ecr get-login-password --region ${{ env.AWS_REGION }})
+          kubectl create secret docker-registry ecr-secret \
+            --docker-server=${{ env.ECR_REGISTRY }} \
+            --docker-username=AWS \
+            --docker-password=$ECR_TOKEN \
+            -n stateful-app \
+            --dry-run=client -o yaml | kubectl apply -f -
+
       - name: Deploy database StatefulSet
         run: |
           kubectl apply -f k8s/service-db-headless.yaml
@@ -102,7 +112,11 @@ jobs:
 
       - name: Wait for database pods
         run: |
-          kubectl rollout status statefulset/postgres -n stateful-app --timeout=120s
+          echo "Waiting for StatefulSet to be ready..."
+          kubectl rollout status statefulset/postgres -n stateful-app --timeout=180s
+          echo "Waiting for pods to be Running..."
+          kubectl wait --for=condition=Ready pod/postgres-0 -n stateful-app --timeout=120s || true
+          kubectl get pods -n stateful-app -l app=postgres
 
       - name: Deploy backend
         run: |
@@ -115,14 +129,27 @@ jobs:
           sed "s|__ECR_REGISTRY__|${{ env.ECR_REGISTRY }}|g; s|__TAG__|${{ needs.build-and-push.outputs.image_tag }}|g" \
             k8s/frontend.yaml | kubectl apply -f -
           kubectl apply -f k8s/frontend-service.yaml
+          kubectl -n stateful-app patch svc frontend --type json \
+            -p '[{"op":"replace","path":"/spec/type","value":"NodePort"},{"op":"replace","path":"/spec/ports","value":[{"port":80,"targetPort":3000,"nodePort":30080}]}]'
+
+      - name: Wait for all pods
+        run: |
+          echo "Waiting for backend..."
+          kubectl rollout status deployment/backend -n stateful-app --timeout=120s || true
+          echo "Waiting for frontend..."
+          kubectl rollout status deployment/frontend -n stateful-app --timeout=120s || true
+          sleep 10
 
       - name: Verify deployment
         run: |
           echo "=== Pods ==="
-          kubectl get pods -n stateful-app
+          kubectl get pods -n stateful-app -o wide
           echo ""
           echo "=== Services ==="
           kubectl get svc -n stateful-app
           echo ""
           echo "=== StatefulSet ==="
           kubectl get statefulset -n stateful-app
+          echo ""
+          echo "=== PVCs ==="
+          kubectl get pvc -n stateful-app
