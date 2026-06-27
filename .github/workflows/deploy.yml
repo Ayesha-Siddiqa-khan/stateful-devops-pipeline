@@ -1,4 +1,4 @@
-name: Build and Deploy
+﻿name: Build and Deploy
 
 on:
   push:
@@ -104,6 +104,14 @@ jobs:
             --docker-password=$ECR_TOKEN \
             -n stateful-app \
             --dry-run=client -o yaml | kubectl apply -f -
+
+      - name: Install EBS CSI driver
+        run: |
+          kubectl apply -k "github.com/kubernetes-sigs/aws-ebs-csi-driver/deploy/kubernetes/overlays/stable/?ref=release-1.35" || true
+          echo "Waiting for EBS CSI controller..."
+          kubectl rollout status deployment/ebs-csi-controller -n kube-system --timeout=120s || true
+          kubectl patch deployment ebs-csi-controller -n kube-system --type json -p='[{"op":"add","path":"/spec/template/spec/nodeSelector","value":{"node-role.kubernetes.io/control-plane":""}},{"op":"add","path":"/spec/template/spec/tolerations","value":[{"key":"node-role.kubernetes.io/control-plane","operator":"Exists","effect":"NoSchedule"}]}]' || true
+          sleep 15
 
       - name: Deploy database StatefulSet
         run: |
