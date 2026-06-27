@@ -92,6 +92,31 @@ kubectl apply -f k8s/ --dry-run=client
 - **NEVER change the map key** - only change `instance_type` value
 - Use `instance_type: "t3.small"` (not `t3.micro` which runs out of memory)
 
+### 9. Cross-Node Pod Networking Broken (Calico VXLAN)
+- **Root cause**: AWS source/dest check blocks cross-node pod traffic
+- **Fix**: Set `source_dest_check = false` on EC2 instances in `terraform/ec2.tf`
+- Calico RBAC: The official Calico manifest binds to `calico-system` namespace, but pods run in `kube-system`
+- **Fix**: Create extra ClusterRoleBindings for `kube-system` service accounts (see deploy.yml)
+- **Root cause 2**: Stale BIRD/felix processes from previous installs hold port 9099
+- **Fix**: `sudo killall -9 bird bird6 felix; sudo fuser -k -9 9099/tcp` before redeploying Calico
+- `ipset` package must be installed on all nodes for Calico VXLAN filtering
+
+### 10. Backend CrashLoopBackOff — psycopg2 Missing
+- `main.py` uses `sqlalchemy.create_engine()` (sync driver) which needs `psycopg2-binary`
+- `requirements.txt` only had `asyncpg` (async driver)
+- **Fix**: Add `psycopg2-binary==2.9.9` to `backend/requirements.txt`
+
+### 11. Frontend CrashLoopBackOff — Standalone + Webpack
+- Custom `server.js` calls `require("next")` which loads webpack bundles
+- Next.js standalone mode (`output: "standalone"`) doesn't include full webpack bundles
+- **Fix**: Remove `output: "standalone"` from `next.config.js`, copy `.next/` + `node_modules/` instead of `.next/standalone/`
+- `npm ci --production` in Dockerfile skips devDependencies needed for build — use `npm ci` instead
+
+### 12. DATABASE_URL Password Has Unencoded `#`
+- Password `Kb$9xLm2#pQr7wNz` contains `#` which is a URL fragment delimiter
+- Python URL parser treats `#pQr7wNz@host` as fragment, not part of password
+- **Fix**: URL-encode `#` as `%23` in the DATABASE_URL secret
+
 ## Key Files to Check When Something Breaks
 
 | Problem | Check These Files |

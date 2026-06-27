@@ -41,7 +41,7 @@ resource "aws_s3_object" "bootstrap_kubernetes_master_base_packages" {
 echo "[TerraPilot][base] Installing common packages"
 export DEBIAN_FRONTEND=noninteractive
 apt-get update -y
-apt-get install -y ca-certificates curl unzip git jq gnupg lsb-release apt-transport-https
+apt-get install -y ca-certificates curl unzip git jq gnupg lsb-release apt-transport-https ipset
 # Post-install verification
 for CMD in curl wget unzip git; do
   if command -v "$CMD" >/dev/null 2>&1; then
@@ -58,7 +58,7 @@ EOT
 echo "[TerraPilot][base] Installing common packages"
 export DEBIAN_FRONTEND=noninteractive
 apt-get update -y
-apt-get install -y ca-certificates curl unzip git jq gnupg lsb-release apt-transport-https
+apt-get install -y ca-certificates curl unzip git jq gnupg lsb-release apt-transport-https ipset
 # Post-install verification
 for CMD in curl wget unzip git; do
   if command -v "$CMD" >/dev/null 2>&1; then
@@ -196,7 +196,7 @@ resource "aws_s3_object" "bootstrap_kubernetes_worker_base_packages" {
 echo "[TerraPilot][base] Installing common packages"
 export DEBIAN_FRONTEND=noninteractive
 apt-get update -y
-apt-get install -y ca-certificates curl unzip git jq gnupg lsb-release apt-transport-https
+apt-get install -y ca-certificates curl unzip git jq gnupg lsb-release apt-transport-https ipset
 # Post-install verification
 for CMD in curl wget unzip git; do
   if command -v "$CMD" >/dev/null 2>&1; then
@@ -213,7 +213,7 @@ EOT
 echo "[TerraPilot][base] Installing common packages"
 export DEBIAN_FRONTEND=noninteractive
 apt-get update -y
-apt-get install -y ca-certificates curl unzip git jq gnupg lsb-release apt-transport-https
+apt-get install -y ca-certificates curl unzip git jq gnupg lsb-release apt-transport-https ipset
 # Post-install verification
 for CMD in curl wget unzip git; do
   if command -v "$CMD" >/dev/null 2>&1; then
@@ -570,6 +570,7 @@ resource "aws_instance" "main" {
   associate_public_ip_address = each.value.associate_public_ip
   vpc_security_group_ids      = local.ec2_security_group_ids
   key_name                    = local.ec2_key_name
+  source_dest_check           = false
   user_data_base64 = each.value.role == "kubernetes-master" ? base64gzip(templatefile("${path.module}/scripts/bootstrap-user-data.sh", {
     project_name               = var.project_name
     environment                = var.environment

@@ -90,6 +90,85 @@ jobs:
           kubectl apply -f k8s/storage/gp3-storageclass.yaml
           kubectl apply -f k8s/stateful-app/namespace.yaml
 
+      - name: Install Calico CNI
+        run: |
+          kubectl apply -f https://raw.githubusercontent.com/projectcalico/calico/v3.28.0/manifests/calico.yaml || true
+          # Fix RBAC: calico manifests use calico-system namespace, but pods run in kube-system
+          cat <<'EOF' | kubectl apply -f -
+          apiVersion: rbac.authorization.k8s.io/v1
+          kind: ClusterRole
+          metadata:
+            name: calico-cni-token-creator
+          rules:
+          - apiGroups: [""]
+            resources: ["serviceaccounts/token"]
+            resourceNames: ["calico-cni-plugin"]
+            verbs: ["create"]
+          ---
+          apiVersion: rbac.authorization.k8s.io/v1
+          kind: ClusterRoleBinding
+          metadata:
+            name: calico-node-token-creator
+          subjects:
+          - kind: ServiceAccount
+            name: calico-node
+            namespace: kube-system
+          roleRef:
+            kind: ClusterRole
+            name: calico-cni-token-creator
+            apiGroup: rbac.authorization.k8s.io
+          ---
+          apiVersion: rbac.authorization.k8s.io/v1
+          kind: ClusterRoleBinding
+          metadata:
+            name: calico-node-system
+          subjects:
+          - kind: ServiceAccount
+            name: calico-node
+            namespace: kube-system
+          roleRef:
+            kind: ClusterRole
+            name: calico-node
+            apiGroup: rbac.authorization.k8s.io
+          ---
+          apiVersion: rbac.authorization.k8s.io/v1
+          kind: ClusterRoleBinding
+          metadata:
+            name: calico-cni-plugin-system
+          subjects:
+          - kind: ServiceAccount
+            name: calico-cni-plugin
+            namespace: kube-system
+          roleRef:
+            kind: ClusterRole
+            name: calico-cni-plugin
+            apiGroup: rbac.authorization.k8s.io
+          ---
+          apiVersion: rbac.authorization.k8s.io/v1
+          kind: ClusterRoleBinding
+          metadata:
+            name: calico-kube-controllers-system
+          subjects:
+          - kind: ServiceAccount
+            name: calico-kube-controllers
+            namespace: kube-system
+          roleRef:
+            kind: ClusterRole
+            name: calico-kube-controllers
+            apiGroup: rbac.authorization.k8s.io
+          EOF
+          echo "Waiting for Calico..."
+          kubectl rollout status daemonset/calico-node -n kube-system --timeout=180s || true
+
+      - name: Install EBS CSI driver
+        run: |
+          kubectl apply -k "github.com/kubernetes-sigs/aws-ebs-csi-driver/deploy/kubernetes/overlays/stable/?ref=release-1.35" || true
+          echo "Waiting for EBS CSI controller..."
+          kubectl rollout status deployment/ebs-csi-controller -n kube-system --timeout=120s || true
+          # Patch controller to run on master node (has internet for EC2 API)
+          kubectl patch deployment ebs-csi-controller -n kube-system --type json -p='[{"op":"add","path":"/spec/template/spec/nodeSelector","value":{"node-role.kubernetes.io/control-plane":""}},{"op":"add","path":"/spec/template/spec/tolerations","value":[{"key":"node-role.kubernetes.io/control-plane","operator":"Exists","effect":"NoSchedule"}]}]' || true
+          sleep 15
+
       - name: Deploy secrets and config
         run: |
           kubectl apply -f k8s/configmap.yaml
@@ -104,14 +183,6 @@ jobs:
             --docker-password=$ECR_TOKEN \
             -n stateful-app \
             --dry-run=client -o yaml | kubectl apply -f -
-
-      - name: Install EBS CSI driver
-        run: |
-          kubectl apply -k "github.com/kubernetes-sigs/aws-ebs-csi-driver/deploy/kubernetes/overlays/stable/?ref=release-1.35" || true
-          echo "Waiting for EBS CSI controller..."
-          kubectl rollout status deployment/ebs-csi-controller -n kube-system --timeout=120s || true
-          kubectl patch deployment ebs-csi-controller -n kube-system --type json -p='[{"op":"add","path":"/spec/template/spec/nodeSelector","value":{"node-role.kubernetes.io/control-plane":""}},{"op":"add","path":"/spec/template/spec/tolerations","value":[{"key":"node-role.kubernetes.io/control-plane","operator":"Exists","effect":"NoSchedule"}]}]' || true
-          sleep 15
 
       - name: Deploy database StatefulSet
         run: |
