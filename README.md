@@ -2,6 +2,8 @@
 
 A full-stack application built for DevOps deployment practice on AWS with self-managed Kubernetes.
 
+
+.........
 **Frontend:** Next.js (React)
 **Backend:** FastAPI (Python)
 **Database:** PostgreSQL (StatefulSet on AWS EBS gp3)
